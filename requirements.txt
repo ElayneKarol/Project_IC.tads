@@ -1,0 +1,8 @@
+tensorflow
+flask
+flask-cors
+streamlit
+streamlit-drawable-canvas
+pillow
+requests
+opencv-python  # opcional, melhora o redimensionamento da imagem

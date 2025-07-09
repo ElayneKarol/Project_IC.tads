@@ -46,8 +46,8 @@ if canvas_result.image_data is not None:
             st.success("Arquivo drawing.npy salvo localmente.")
     with col2:
         if st.button("Enviar para predição"):
-            # Preprocessar: normalizar conforme treino
-            data = inverted.astype(np.float32) / 255.0
+            # Normalização conforme treinamento
+            data = img_array.astype(np.float32) / 255.0
             payload = {"pixels": data.tolist()}
             try:
                 resp = requests.post(API_URL, json=payload, timeout=5)
@@ -56,4 +56,4 @@ if canvas_result.image_data is not None:
                 st.success(f"Predição: {result['predicted_class']}")
                 st.write(f"Probabilidades: {np.round(result['probabilities'], 3).tolist()}")
             except requests.exceptions.RequestException as e:
-                st.error(f"Erro ao conectar ao servidor: {e}")
+                st.error(f"Erro ao conectar ao servidor: {e}")
