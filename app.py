@@ -17,7 +17,7 @@ app = Flask(__name__)
 CORS(app)
 logging.basicConfig(level=logging.INFO)
 
-# Carrega o modelo com custom_objects para deserializar softmax_v2
+# Carrega o modelo com custom_objects para desserializar softmax_v2
 try:
     custom_objs = {"softmax_v2": tf.keras.activations.softmax}
     model = tf.keras.models.load_model(MODEL_PATH, custom_objects=custom_objs)
@@ -33,24 +33,24 @@ def predict():
         if "pixels" not in data:
             return jsonify({"error": "Chave 'pixels' ausente"}), 400
 
+        # Converte diretamente para float32 sem normalização
         pixels = np.array(data["pixels"], dtype=np.float32)
         if pixels.shape != (28, 28):
             return jsonify({"error": f"Formato inválido: esperado (28,28), recebido {pixels.shape}"}), 400
 
-
-        img = pixels
-        # Expande dims: batch e canal
+        # Expande dims: canal e batch para shape (1,28,28,1)
+        img = np.expand_dims(pixels, axis=-1)
         img = np.expand_dims(img, axis=0)
 
         # Predição
-        logits = model.predict(img)
-        # Aplica softmax caso o modelo não o tenha na saída
-        probs = tf.nn.softmax(logits[0]).numpy()
+        preds = model.predict(img)
+        # Se a saída já for probabilidades (softmax), usa direto
+        probs = preds[0].tolist()
         pred_class = int(np.argmax(probs))
 
         return jsonify({
             "predicted_class": pred_class,
-            "probabilities": probs.tolist()
+            "probabilities": probs
         })
     except Exception as e:
         logging.exception("Erro no endpoint /predict")

@@ -47,7 +47,7 @@ if canvas_result.image_data is not None:
     with col2:
         if st.button("Enviar para predição"):
             # Normalização conforme treinamento
-            data = img_array.astype(np.float32) / 255.0
+            data = img_array.astype(np.float32)
             payload = {"pixels": data.tolist()}
             try:
                 resp = requests.post(API_URL, json=payload, timeout=5)
