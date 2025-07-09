@@ -45,15 +45,23 @@ if canvas_result.image_data is not None:
             np.save("drawing.npy", inverted)
             st.success("Arquivo drawing.npy salvo localmente.")
     with col2:
-        if st.button("Enviar para predição"):
-            # Normalização conforme treinamento
-            data = img_array.astype(np.float32)
-            payload = {"pixels": data.tolist()}
+        if st.button("Enviar para predição", key="predict"):
+            payload = {"pixels": img_array.astype(np.float32).tolist()}
             try:
-                resp = requests.post(API_URL, json=payload, timeout=5)
-                resp.raise_for_status()
-                result = resp.json()
-                st.success(f"Predição: {result['predicted_class']}")
-                st.write(f"Probabilidades: {np.round(result['probabilities'], 3).tolist()}")
+                response = requests.post(API_URL, json=payload, timeout=5)
+                response.raise_for_status()
+                result = response.json()
+                pred = result['predicted_class']
+                probs = result['probabilities']
+                # Converte para porcentagem e filtra >0
+                percents = [round(p * 100) for p in probs]
+                items = [(i, percents[i]) for i in range(len(percents)) if percents[i] > 0]
+                # Ordena por probabilidade
+                items.sort(key=lambda x: x[1], reverse=True)
+                # Formata como "digit=xx%"
+                formatted = ", ".join(f"{digit}={pct}%" for digit, pct in items)
+
+                st.success(f"Valor Predito: {pred}")
+                st.write(f"Probabilidades: {formatted}")
             except requests.exceptions.RequestException as e:
                 st.error(f"Erro ao conectar ao servidor: {e}")
