@@ -4,6 +4,7 @@ import numpy as np
 import requests
 import streamlit as st
 from streamlit_drawable_canvas import st_canvas
+from PIL import Image
 
 # Configuração da API do back-end
 API_URL = os.getenv("API_URL", "http://localhost:5000/predict")
@@ -23,40 +24,19 @@ canvas_result = st_canvas(
     key="canvas",
 )
 
-# Se usuário desenhou
 if canvas_result.image_data is not None:
-    # Converte imagem 280x280 para escala de cinza 28x28
-    gray_img = np.mean(canvas_result.image_data[..., :3], axis=2)
-    # Redimensiona
-    small_img = np.array(
-        np.round(
-            np.array(
-                np.kron(gray_img / 255.0, np.ones((1, 1)))
-            ),
-        )
-    )
-    small_img = np.uint8(
-        np.array(
-            np.round(
-                np.array(
-                    canvas_result.image_data[..., :3].mean(axis=2)
-                )
-            )
-        )
-    )
-    # Ajuste correto: usar cv2 (se disponível) para redimensionar:
-    try:
-        import cv2
-        small_img = cv2.resize(gray_img, (28, 28), interpolation=cv2.INTER_AREA)
-    except ImportError:
-        small_img = np.array(
-            np.mean(canvas_result.image_data, axis=2)
-        )
-        small_img = small_img[::10, ::10]
+    img = Image.fromarray((canvas_result.image_data).astype("uint8"))
+    img_resized = img.resize((28, 28)).convert("L")
 
-    # Inverte: background branco (255) -> 0, traço preto (0) -> 255
-    inverted = (255 - small_img).astype(np.uint8)
-    st.subheader("Matriz 28x28"); st.write(inverted.tolist())
+    st.subheader("🖼️ Visualização da Imagem 28x28")
+    st.image(img_resized, width=150)
+
+    img_array = np.array(img_resized)
+    img_array = 255 - img_array  # inverte: fundo branco vira 0, traço preto vira 255
+
+    st.subheader("📊 Matriz de pixels (28x28) — escala de 0 a 255")
+    st.write(img_array)
+
 
     # Botões separados
     col1, col2 = st.columns(2)
