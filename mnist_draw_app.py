@@ -1,46 +1,79 @@
+import os
+import json
+import numpy as np
+import requests
 import streamlit as st
 from streamlit_drawable_canvas import st_canvas
-import numpy as np
-from PIL import Image
 
+# Configuração da API do back-end
+API_URL = os.getenv("API_URL", "http://localhost:5000/predict")
 
-st.title("🖍️ Desenhe um Dígito (28x28 pixels)")
+st.set_page_config(page_title="MNIST Draw & Predict", layout="centered")
+st.title("Desenhe um número e veja a predição")
 
-# Configurações da tela de desenho
+# Canvas de desenho
 canvas_result = st_canvas(
-    fill_color="white",  # Cor de fundo
-    stroke_width=10,      # Espessura do traço
-    stroke_color="black", # Cor do traço
-    background_color="white",
-    width=280,            # Tamanho em pixels (10x a resolução final)
+    fill_color="rgba(0, 0, 0, 0)",  # Fundo transparente
+    stroke_width=15,
+    stroke_color="#000000",
+    background_color="#FFFFFF",
     height=280,
+    width=280,
     drawing_mode="freedraw",
     key="canvas",
 )
 
+# Se usuário desenhou
 if canvas_result.image_data is not None:
-    img = Image.fromarray((canvas_result.image_data).astype("uint8"))
-    img_resized = img.resize((28, 28)).convert("L")
+    # Converte imagem 280x280 para escala de cinza 28x28
+    gray_img = np.mean(canvas_result.image_data[..., :3], axis=2)
+    # Redimensiona
+    small_img = np.array(
+        np.round(
+            np.array(
+                np.kron(gray_img / 255.0, np.ones((1, 1)))
+            ),
+        )
+    )
+    small_img = np.uint8(
+        np.array(
+            np.round(
+                np.array(
+                    canvas_result.image_data[..., :3].mean(axis=2)
+                )
+            )
+        )
+    )
+    # Ajuste correto: usar cv2 (se disponível) para redimensionar:
+    try:
+        import cv2
+        small_img = cv2.resize(gray_img, (28, 28), interpolation=cv2.INTER_AREA)
+    except ImportError:
+        small_img = np.array(
+            np.mean(canvas_result.image_data, axis=2)
+        )
+        small_img = small_img[::10, ::10]
 
-    st.subheader("🖼️ Visualização da Imagem 28x28")
-    st.image(img_resized, width=150)
+    # Inverte: background branco (255) -> 0, traço preto (0) -> 255
+    inverted = (255 - small_img).astype(np.uint8)
+    st.subheader("Matriz 28x28"); st.write(inverted.tolist())
 
-    img_array = np.array(img_resized)
-    img_array = 255 - img_array  # inverte: fundo branco vira 0, traço preto vira 255
-
-    st.subheader("📊 Matriz de pixels (28x28) — escala de 0 a 255")
-    st.write(img_array)
-
-    if st.button("Salvar como .npy"):
-        np.save("desenho_28x28.npy", img_array)
-        st.success("Imagem salva como 'desenho_28x28.npy'")
-
-# img_array é seu array 28×28 de 0–255
-        payload = {"pixels": img_array.tolist()}
-        resp = requests.post("http://localhost:5000/predict", json=payload)
-        result = resp.json()
-
-        st.subheader("Predição do Modelo")
-        st.write(f"🖥 Classe: {result['predicted_class']}")
-        st.write("📊 Probabilidades:")
-        st.write(result["probabilities"])
+    # Botões separados
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("Download .npy"):
+            np.save("drawing.npy", inverted)
+            st.success("Arquivo drawing.npy salvo localmente.")
+    with col2:
+        if st.button("Enviar para predição"):
+            # Preprocessar: normalizar conforme treino
+            data = inverted.astype(np.float32) / 255.0
+            payload = {"pixels": data.tolist()}
+            try:
+                resp = requests.post(API_URL, json=payload, timeout=5)
+                resp.raise_for_status()
+                result = resp.json()
+                st.success(f"Predição: {result['predicted_class']}")
+                st.write(f"Probabilidades: {np.round(result['probabilities'], 3).tolist()}")
+            except requests.exceptions.RequestException as e:
+                st.error(f"Erro ao conectar ao servidor: {e}")

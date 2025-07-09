@@ -1,52 +1,57 @@
-# app.py
+import os
+import logging
+
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 import numpy as np
 import tensorflow as tf
-import requests
 
+# Configurações
+MODEL_PATH = os.getenv("MODEL_PATH", "mnist_nn_model.keras")
+HOST = os.getenv("API_HOST", "0.0.0.0")
+PORT = int(os.getenv("API_PORT", 5000))
+DEBUG = os.getenv("DEBUG", "False").lower() in ("true", "1", "yes")
+
+# Setup do Flask
 app = Flask(__name__)
+CORS(app)  # Habilita CORS para todas rotas
+logging.basicConfig(level=logging.INFO)
 
-# 1. Carrega o modelo treinado (formato .keras)
-MODEL_PATH = "mnist_nn_model.keras"
-model = tf.keras.models.load_model(MODEL_PATH)
+# Carrega o modelo
+try:
+    model = tf.keras.models.load_model(MODEL_PATH)
+    logging.info(f"Modelo carregado de: {MODEL_PATH}")
+except Exception as e:
+    logging.error(f"Falha ao carregar modelo: {e}")
+    raise
 
-# 2. Rota de predição
 @app.route("/predict", methods=["POST"])
 def predict():
-    """
-    Espera um JSON:
-    {
-      "pixels": [[0, 0, 12, ..., 255],  # 28 valores
-                 ...                    # 28 linhas
-                ]
-    }
-    Retorna:
-    {
-      "predicted_class": 7,
-      "probabilities": [0.0001, 0.0023, ..., 0.9102]
-    }
-    """
-    data = request.get_json(force=True)
-    pixels = np.array(data["pixels"], dtype=np.float32)  # shape (28,28)
-    
-    # 3. Pré‑processamento: 
-    #    - já vêm em 0–255, igual ao treino do notebook (sem normalização para 0–1)
-    #    - converter shape para (1,28,28)
-    img = np.expand_dims(pixels, axis=0)
+    try:
+        data = request.get_json(force=True)
+        if "pixels" not in data:
+            return jsonify({"error":"Chave 'pixels' ausente"}), 400
 
-    # 4. Obter os logits e converter para probabilidades
-    logits = model.predict(img)            # shape (1,10)
-    probs = tf.nn.softmax(logits[0]).numpy()
+        pixels = np.array(data["pixels"], dtype=np.float32)
+        if pixels.shape != (28, 28):
+            return jsonify({"error": f"Formato inválido: esperado (28,28), recebido {pixels.shape}"}), 400
 
-    # 5. Extrair a classe com maior probabilidade
-    pred_class = int(np.argmax(probs))
+        # Expande dims: batch e canal
+        img = np.expand_dims(img, axis=0)           # shape (1,28,28)
+        img = np.expand_dims(img, axis=-1)          # shape (1,28,28,1)
 
-    return jsonify({
-        "predicted_class": pred_class,
-        "probabilities": probs.tolist()
-    })
+        # Predição
+        logits = model.predict(img)
+        probs = tf.nn.softmax(logits[0]).numpy()
+        pred_class = int(np.argmax(probs))
 
+        return jsonify({
+            "predicted_class": pred_class,
+            "probabilities": probs.tolist()
+        })
+    except Exception as e:
+        logging.exception("Erro no endpoint /predict")
+        return jsonify({"error": "Erro interno do servidor", "details": str(e)}), 500
 
 if __name__ == "__main__":
-    # Para desenvolvimento local
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host=HOST, port=PORT, debug=DEBUG)
